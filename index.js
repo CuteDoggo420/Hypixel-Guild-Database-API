@@ -249,13 +249,26 @@ app.get("/guild/:identifier", (req, res) => {
 });
 
 app.get("/stats", (req, res) => {
-  res.json({
-    totalGuildsTracked: stats.totalGuildsTracked,
-      guildsAddedInLast60s: countInWindow(stats.guildsAddedTimestamps, 60 * 1000),
-    hypixelApiRequestsLast5m: countInWindow(stats.hypixelApiRequestTimestamps, 5 * 60 * 1000),
-      dbRequestsInLast60s: countInWindow(stats.dbGuildRequestsTimestamps, 60 * 1000),
-  });
+    const now = Date.now();
+
+    db.get(`SELECT COUNT(DISTINCT uuid) AS totalPlayers FROM members`, [], (err, playerRow) => {
+        if (err) {
+            console.error("Error counting players:", err);
+            return res.status(500).json({ error: "Database error" });
+        }
+
+        const playersTracked = playerRow?.totalPlayers || 0;
+
+        const statsData = {
+            hypixelApiRequestsLast5m: stats.hypixelApiRequestTimestamps.filter(ts => now - ts < 5 * 60 * 1000).length,
+            guildsAddedInLast60s: stats.guildsAddedTimestamps.filter(ts => now - ts < 60 * 1000).length,
+            playersTracked
+        };
+
+        res.json(statsData);
+    });
 });
+
 
 app.get('/guilds', (req, res) => {
     const sql = `
