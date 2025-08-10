@@ -25,7 +25,6 @@ const DB_PATH = process.env.DB_PATH || path.join("/data", "hypixel_cache.db");
 
 function countInWindow(timestamps, windowMs) {
   const cutoff = Date.now() - windowMs;
-  // Remove old timestamps to keep array clean
   while (timestamps.length && timestamps[0] < cutoff) {
     timestamps.shift();
   }
@@ -59,15 +58,6 @@ db.serialize(() => {
     last_scan INTEGER
   )`);
 });
-
-db.run(`
-    CREATE TABLE IF NOT EXISTS unguilded_players (
-        uuid TEXT PRIMARY KEY,
-        name TEXT,
-        last_scanned INTEGER
-    )
-`);
-
 
 db.get("SELECT COUNT(*) as count FROM guilds", (err, row) => {
   if (!err && row) stats.totalGuildsTracked = row.count;
@@ -114,7 +104,7 @@ function upsertGuild(guild) {
         for (const member of guild.members) {
           stmt.run([member.uuid.replace(/-/g, ""), guild._id, member.rank, memberLastScan]);
         }
-        stats.totalGuildsTracked = stats.totalGuildsTracked + 1; 
+        stats.totalGuildsTracked = stats.totalGuildsTracked + 1;
         stats.guildsAddedTimestamps.push(Date.now());
         stmt.finalize((err) => {
           if (err) return reject(err);
@@ -141,29 +131,29 @@ function removePlayerFromOldGuild(uuid, currentGuildId) {
   });
 }
 
-async function scanPlayerGuild(uuid, name) {
+async function scanPlayerGuild(uuid) {
   try {
     console.log(`Scanning guild for player ${uuid}...`);
     const guild = await fetchGuildByUUID(uuid);
     if (!guild) {
       db.run(
-        `INSERT INTO players_no_guild (uuid, name, last_scan) VALUES (?, ?, ?)
-         ON CONFLICT(uuid) DO UPDATE SET name=excluded.name, last_scan=excluded.last_scan`,
-        [uuid, name || "", now()]
+        `INSERT INTO players_no_guild (uuid, last_scan) VALUES (?, ?)
+         ON CONFLICT(uuid) DO UPDATE SET last_scan=excluded.last_scan`,
+        [uuid, now()]
       );
-      console.log(`Player ${uuid} (${name}) is not in a guild.`);
+      console.log(`Player ${uuid} is not in a guild.`);
       return;
     }
     db.run(`DELETE FROM players_no_guild WHERE uuid = ?`, [uuid]);
 
     await removePlayerFromOldGuild(uuid, guild._id);
+
     await upsertGuild(guild);
     console.log(`Guild ${guild.name} (${guild._id}) updated.`);
   } catch (error) {
     console.error("Error scanning guild:", error.message);
   }
 }
-
 
 app.post("/player", (req, res) => {
   const { uuid } = req.body;
@@ -283,17 +273,6 @@ app.get('/guilds', (req, res) => {
         res.json(rows);
     });
 });
-
-app.get('/unguilded', (req, res) => {
-    db.all('SELECT * FROM unguilded_players', (err, rows) => {
-        if (err) {
-            console.error("Error fetching unguilded players:", err);
-            return res.status(500).json({ error: err.message });
-        }
-        res.json(rows);
-    });
-});
-
 
 const PORT = process.env.PORT || 3000;
 app.listen(PORT, () => {
