@@ -259,7 +259,7 @@ app.get("/stats", (req, res) => {
   });
 });
 
-app.get('/guilds', (req, res) => {
+app.get('/guilds/list', (req, res) => {
     const sql = `
         SELECT g.name AS guildName, COUNT(m.uuid) AS memberCount
         FROM guilds g
