@@ -259,6 +259,23 @@ app.get("/stats", (req, res) => {
   });
 });
 
+app.get('/guilds', (req, res) => {
+    const sql = `
+        SELECT g.name AS guildName, COUNT(m.uuid) AS memberCount
+        FROM guilds g
+        LEFT JOIN members m ON g.guild_id = m.guild_id
+        GROUP BY g.guild_id
+        ORDER BY memberCount DESC
+    `;
+    db.all(sql, [], (err, rows) => {
+        if (err) {
+            console.error("Error fetching guild list:", err);
+            return res.status(500).json({ error: 'Database error' });
+        }
+        res.json(rows);
+    });
+});
+
 const PORT = process.env.PORT || 3000;
 app.listen(PORT, () => {
   console.log(`http://localhost:${PORT}`);
