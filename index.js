@@ -67,7 +67,7 @@ function now() {
   return Math.floor(Date.now() / 1000);
 }
 
-const SEVEN_DAYS = 7*24*60*60;
+const SEVEN_DAYS = 60*60;
 
 // simple queue with concurrency 1 and intervalCap 60 per minute
 const queue = new PQueue({
@@ -259,7 +259,7 @@ app.get("/stats", (req, res) => {
 
 app.get('/guilds', (req, res) => {
     const sql = `
-        SELECT g.name AS guildName, COUNT(m.uuid) AS memberCount
+        SELECT g.name AS guildName, COUNT(m.uuid) AS memberCount, g.last_scan AS lastUpdated
         FROM guilds g
         LEFT JOIN members m ON g.guild_id = m.guild_id
         GROUP BY g.guild_id
@@ -273,6 +273,7 @@ app.get('/guilds', (req, res) => {
         res.json(rows);
     });
 });
+
 
 const PORT = process.env.PORT || 3000;
 app.listen(PORT, () => {
