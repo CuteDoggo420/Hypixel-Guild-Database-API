@@ -1,0 +1,17 @@
+{
+  "name": "hypixel-guild-database-api",
+  "version": "1.0.0",
+  "description": "guild api/database for hypixel",
+  "main": "index.js",
+  "scripts": {
+    "start": "node index.js"
+  },
+  "author": "CuteDoggo420",
+  "license": "MIT",
+  "dependencies": {
+    "axios": "^1.4.0",
+    "express": "^4.18.2",
+    "p-queue": "^7.3.0",
+    "sqlite3": "^5.1.6"
+  }
+}
