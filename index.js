@@ -36,27 +36,46 @@ const db = new sqlite3.Database(DB_PATH, (err) => {
   if (err) return console.error(err.message);
   console.log("Connected to SQLite database.");
 });
+function ensureColumnExists(table, column, type) {
+    db.get(`PRAGMA table_info(${table})`, (err, rows) => {
+        if (err) return console.error(`Error checking table ${table}:`, err);
+        const exists = rows.some(row => row.name === column);
+        if (!exists) {
+            db.run(`ALTER TABLE ${table} ADD COLUMN ${column} ${type}`, (err2) => {
+                if (err2) console.error(`Error adding column ${column} to ${table}:`, err2);
+                else console.log(`Added missing column ${column} to ${table}.`);
+            });
+        }
+    });
+}
+
+// Run auto-migrations
+ensureColumnExists("members", "highest_sb_level", "REAL DEFAULT NULL");
+ensureColumnExists("members", "level_last_updated", "INTEGER DEFAULT NULL");
+ensureColumnExists("guilds", "avg_sb_level", "REAL DEFAULT NULL");
 
 db.serialize(() => {
-  db.run(`CREATE TABLE IF NOT EXISTS guilds (
-    guild_id TEXT PRIMARY KEY,
-    name TEXT,
-    tag TEXT,
-    last_scan INTEGER
-  )`);
+  db.run(`
+    CREATE TABLE IF NOT EXISTS guilds (
+        guild_id TEXT PRIMARY KEY,
+        name TEXT,
+        tag TEXT,
+        last_scan INTEGER,
+        avg_sb_level REAL DEFAULT NULL
+    )
+`);
 
-  db.run(`CREATE TABLE IF NOT EXISTS members (
-    uuid TEXT PRIMARY KEY,
-    guild_id TEXT,
-    rank TEXT,
-    last_scan INTEGER,
-    FOREIGN KEY(guild_id) REFERENCES guilds(guild_id)
-  )`);
+db.run(`
+    CREATE TABLE IF NOT EXISTS members (
+        uuid TEXT PRIMARY KEY,
+        guild_id TEXT,
+        rank TEXT,
+        last_scan INTEGER,
+        highest_sb_level REAL DEFAULT NULL,
+        level_last_updated INTEGER DEFAULT NULL
+    )
+`);
 
-  db.run(`CREATE TABLE IF NOT EXISTS players_no_guild (
-    uuid TEXT PRIMARY KEY,
-    last_scan INTEGER
-  )`);
 });
 
 db.get("SELECT COUNT(*) as count FROM guilds", (err, row) => {
@@ -73,7 +92,7 @@ const SEVEN_DAYS = 60*60;
 const queue = new PQueue({
   concurrency: 1,
   interval: 60*1000,
-  intervalCap: 60,
+  intervalCap: 0,
 });
 
 async function fetchGuildByUUID(uuid) {
@@ -286,7 +305,69 @@ app.get('/guilds', (req, res) => {
         }
         res.json(rows);
     });
-});
+}); 
+
+async function processGuildLevels() {
+    db.all(`
+        SELECT DISTINCT m.uuid, m.guild_id
+        FROM members m
+        LEFT JOIN guilds g ON g.guild_id = m.guild_id
+        ORDER BY m.level_last_updated ASC NULLS FIRST
+        LIMIT 60
+    `, async (err, rows) => {
+        if (err) return console.error(err);
+
+        for (const row of rows) {
+            await updateMemberLevel(row.uuid);
+            recalcGuildAverage(row.guild_id);
+            await new Promise(r => setTimeout(r, 1000));
+        }
+    });
+}
+
+async function updateMemberLevel(uuid) {
+    const nowTime = Date.now();
+    const row = await new Promise((resolve, reject) => {
+        db.get(`SELECT level_last_updated FROM members WHERE uuid = ?`, [uuid], (err, r) => {
+            if (err) reject(err);
+            else resolve(r);
+        });
+    });
+    if (row && row.level_last_updated && (nowTime - row.level_last_updated) < 604800000) return; 
+
+    const level = await fetchHighestSBLevel(uuid);
+    if (level !== null) {
+        db.run(`UPDATE members SET highest_sb_level = ?, level_last_updated = ? WHERE uuid = ?`,
+            [level, nowTime, uuid]);
+    }
+}
+
+async function fetchHighestSBLevel(uuid) {
+    try {
+        const profilesRes = await axios.get(`https://api.hypixel.net/v2/skyblock/profiles?key=${HYPIXEL_API_KEY}&uuid=${uuid}`);
+        stats.hypixelApiRequestTimestamps.push(Date.now());
+
+        if (!profilesRes.data.success || !profilesRes.data.profiles) return null;
+
+        let highestLevel = 0;
+        for (const profile of profilesRes.data.profiles) {
+            if (profile?.members?.[uuid]?.leveling?.experience) {
+                const xp = profile.members[uuid].leveling.experience;
+                const level = xp / 100; 
+                if (level > highestLevel) highestLevel = level;
+            }
+        }
+        return highestLevel;
+    } catch (err) {
+        console.error(`Error fetching SB level for ${uuid}:`, err.message);
+        return null;
+    }
+}
+
+
+setInterval(() => {
+    processGuildLevels(); // Uses the 60/minute slot to update levels
+}, 60 * 1000); // every minute
 
 
 const PORT = process.env.PORT || 3000;
