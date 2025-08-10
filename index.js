@@ -37,7 +37,7 @@ const db = new sqlite3.Database(DB_PATH, (err) => {
   console.log("Connected to SQLite database.");
 });
 function ensureColumnExists(table, column, type) {
-    db.get(`PRAGMA table_info(${table})`, (err, rows) => {
+    db.all(`PRAGMA table_info(${table})`, (err, rows) => {
         if (err) return console.error(`Error checking table ${table}:`, err);
         const exists = rows.some(row => row.name === column);
         if (!exists) {
@@ -48,6 +48,7 @@ function ensureColumnExists(table, column, type) {
         }
     });
 }
+
 
 // Run auto-migrations
 ensureColumnExists("members", "highest_sb_level", "REAL DEFAULT NULL");
@@ -275,12 +276,7 @@ app.get("/stats", (req, res) => {
             console.error("Error counting players:", err);
             return res.status(500).json({ error: "Database error" });
         }
-        db.get(`SELECT COUNT(*) AS count FROM guilds WHERE average_level IS NOT NULL`, (err, row) => {
-    if (!err) {
-        stats.guildsWithLevelAvg = row.count;
-    }
-});
-
+        
 
         const playersTracked = playerRow?.totalPlayers || 0;
 
