@@ -92,7 +92,7 @@ const SEVEN_DAYS = 60*60;
 const queue = new PQueue({
   concurrency: 1,
   interval: 60*1000,
-  intervalCap: 0,
+  intervalCap: 1,
 });
 
 async function fetchGuildByUUID(uuid) {
@@ -275,6 +275,12 @@ app.get("/stats", (req, res) => {
             console.error("Error counting players:", err);
             return res.status(500).json({ error: "Database error" });
         }
+        db.get(`SELECT COUNT(*) AS count FROM guilds WHERE average_level IS NOT NULL`, (err, row) => {
+    if (!err) {
+        stats.guildsWithLevelAvg = row.count;
+    }
+});
+
 
         const playersTracked = playerRow?.totalPlayers || 0;
 
@@ -292,11 +298,15 @@ app.get("/stats", (req, res) => {
 
 app.get('/guilds', (req, res) => {
     const sql = `
-        SELECT g.name AS guildName, COUNT(m.uuid) AS memberCount, g.last_scan AS lastUpdated
+        SELECT 
+            g.name AS guildName, 
+            COUNT(m.uuid) AS memberCount,
+            g.average_level AS avgLevel,
+            g.last_scan AS lastUpdated
         FROM guilds g
         LEFT JOIN members m ON g.guild_id = m.guild_id
         GROUP BY g.guild_id
-        ORDER BY memberCount DESC
+        ORDER BY avgLevel DESC
     `;
     db.all(sql, [], (err, rows) => {
         if (err) {
@@ -305,7 +315,8 @@ app.get('/guilds', (req, res) => {
         }
         res.json(rows);
     });
-}); 
+});
+
 
 async function processGuildLevels() {
     db.all(`
