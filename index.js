@@ -4,6 +4,7 @@ const sqlite3 = require("sqlite3").verbose();
 const path = require("path");
 const axios = require("axios");
 const PQueue = require("p-queue").default;
+const dotenv = require('dotenv').config();
 
 const app = express();
 app.use(bodyParser.json());
