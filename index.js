@@ -260,6 +260,7 @@ app.get("/stats", (req, res) => {
         const playersTracked = playerRow?.totalPlayers || 0;
 
         const statsData = {
+          totalGuildsTracked: stats.totalGuildsTracked,
             hypixelApiRequestsLast5m: stats.hypixelApiRequestTimestamps.filter(ts => now - ts < 5 * 60 * 1000).length,
             guildsAddedInLast60s: stats.guildsAddedTimestamps.filter(ts => now - ts < 60 * 1000).length,
             playersTracked
